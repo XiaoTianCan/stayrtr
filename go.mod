@@ -2,6 +2,8 @@ module github.com/bgp/stayrtr
 
 go 1.24.0
 
+replace github.com/bgp/stayrtr => ./
+
 toolchain go1.24.3
 
 require (

@@ -17,18 +17,20 @@ LDFLAGS       ?= '-X main.version=$(STAYRTR_VERSION) -X main.buildinfos=$(BUILDI
 
 RTRDUMP_NAME  := rtrdump
 RTRMON_NAME   := rtrmon
+RTR_CLIENT_NAME := rtr-client
 
 SUFFIX ?= -$(STAYRTR_VERSION)-$(GOOS)-$(ARCH)$(EXTENSION)
 
 OUTPUT_STAYRTR := $(DIST_DIR)stayrtr$(SUFFIX)
 OUTPUT_RTRDUMP := $(DIST_DIR)rtrdump$(SUFFIX)
 OUTPUT_RTRMON := $(DIST_DIR)rtrmon$(SUFFIX)
+OUTPUT_RTR_CLIENT := $(DIST_DIR)rtr-client$(SUFFIX)
 
 export CGO_ENABLED ?= 0
 
 
 .PHONY: build-all
-build-all: vet build-stayrtr build-rtrdump build-rtrmon
+build-all: vet build-stayrtr build-rtrdump build-rtrmon build-rtr-client
 
 .PHONY: vet
 vet:
@@ -60,6 +62,10 @@ build-rtrdump:
 .PHONY: build-rtrmon
 build-rtrmon:
 	go build -trimpath -ldflags $(LDFLAGS) -o $(OUTPUT_RTRMON) cmd/rtrmon/rtrmon.go
+
+.PHONY: build-rtr-client
+build-rtr-client:
+	go build -trimpath -ldflags $(LDFLAGS) -o $(OUTPUT_RTR_CLIENT) cmd/rtr-client/main.go
 
 .PHONY: docker
 docker:

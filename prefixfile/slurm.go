@@ -12,15 +12,17 @@ import (
 )
 
 type SlurmPrefixFilter struct {
-	Prefix  string
-	ASN     *uint32 `json:"asn,omitempty"`
-	Comment string
+	Prefix   string
+	ASN      *uint32 `json:"asn,omitempty"`
+	MatchAll bool    `json:"matchAll,omitempty"`
+	Comment  string
 }
 
 type SlurmBGPsecFilter struct {
-	ASN     *uint32 `json:"asn,omitempty"`
-	SKI     []byte  `json:"SKI,omitempty"`
-	Comment string  `json:"comment"`
+	ASN      *uint32 `json:"asn,omitempty"`
+	SKI      []byte  `json:"SKI,omitempty"`
+	MatchAll bool    `json:"matchAll,omitempty"`
+	Comment  string  `json:"comment"`
 }
 
 func (pf *SlurmPrefixFilter) GetASN() (uint32, bool) {
@@ -101,21 +103,37 @@ func (s *SlurmValidationOutputFilters) FilterOnVRPs(vrps []VRPJson) (added, remo
 
 		var wasRemoved bool
 		for _, filter := range s.PrefixFilters {
-			fPrefix := filter.GetPrefix()
-			fASN, fASNEmpty := filter.GetASN()
-			match := true
-			if match && fPrefix.IsValid() && rPrefix.IsValid() {
+			match := false
 
-				if !(fPrefix.Overlaps(rPrefix) &&
-				    fPrefix.Bits() <= rPrefix.Bits()) {
+			// Check matchAll first - it overrides other conditions
+			if filter.MatchAll {
+				match = true
+			} else {
+				match = true
+				fPrefix := filter.GetPrefix()
+				fASN, fASNEmpty := filter.GetASN()
+
+				// Check prefix overlap if prefix is valid
+				if fPrefix.IsValid() && rPrefix.IsValid() {
+					if !(fPrefix.Overlaps(rPrefix) &&
+					    fPrefix.Bits() <= rPrefix.Bits()) {
+						match = false
+					}
+				}
+
+				// Check ASN if specified
+				if match && !fASNEmpty {
+					if vrp.GetASN() != fASN {
+						match = false
+					}
+				}
+
+				// If no prefix and no ASN are specified, set match to false
+				if match && !fPrefix.IsValid() && fASNEmpty {
 					match = false
 				}
 			}
-			if match && !fASNEmpty {
-				if vrp.GetASN() != fASN {
-					match = false
-				}
-			}
+
 			if match {
 				removed = append(removed, vrp)
 				wasRemoved = true
@@ -140,7 +158,12 @@ func (s *SlurmValidationOutputFilters) FilterOnBRKs(brks []BgpSecKeyJson) (added
 		var skiCache []byte
 		var wasRemoved bool
 		for _, filter := range s.BgpsecFilters {
-			if filter.ASN != nil {
+			match := false
+
+			// Check matchAll first - it overrides other conditions
+			if filter.MatchAll {
+				match = true
+			} else if filter.ASN != nil {
 				if brk.Asn == *filter.ASN {
 					if len(filter.SKI) != 0 {
 						// We need to compare the SKIs then
@@ -153,20 +176,14 @@ func (s *SlurmValidationOutputFilters) FilterOnBRKs(brks []BgpSecKeyJson) (added
 							}
 						}
 						if bytes.Equal(filter.SKI, skiCache) {
-							removed = append(removed, brk)
-							wasRemoved = true
-							break
+							match = true
 						}
 					} else {
 						// Only a ASN match was needed
-						removed = append(removed, brk)
-						wasRemoved = true
-						break
+						match = true
 					}
 				}
-			}
-
-			if len(filter.SKI) != 0 && filter.ASN == nil {
+			} else if len(filter.SKI) != 0 && filter.ASN == nil {
 				// We need to compare just the SKIs then
 				if skiCache == nil { // We have not yet decoded the ski hex
 					var err error
@@ -177,10 +194,14 @@ func (s *SlurmValidationOutputFilters) FilterOnBRKs(brks []BgpSecKeyJson) (added
 					}
 				}
 				if bytes.Equal(filter.SKI, skiCache) {
-					removed = append(removed, brk)
-					wasRemoved = true
-					break
+					match = true
 				}
+			}
+
+			if match {
+				removed = append(removed, brk)
+				wasRemoved = true
+				break
 			}
 		}
 
